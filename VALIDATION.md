@@ -1,30 +1,32 @@
 # Validation
 
-Validated on Linux with Rust 1.95.0 on 2026-10-30, using the exact revisions in
-`compatibility.json` and the real bundle committed here.
+Run on Linux on 2026-11-01 with the installed Rust/Cargo **1.99.1**.
+The repository requests Rust 1.95.0; that toolchain was not installed locally,
+so local results do not establish a Rust 1.95.0 pass. CI installs that version.
+Horizon and horizon-mixins revisions remain pinned in `compatibility.json`.
 
 | Check | Result |
 |---|---|
 | `cargo fmt --all --check` | Pass |
 | `cargo clippy --workspace --all-targets --locked --offline -- -D warnings` | Pass |
-| `cargo test --workspace --locked --offline` | Runtime unit test passes |
-| `python3 tools/test_template.py` | Actual bundle compiles in the tiny fixture; original method calls/result, shared runtime, AST audit, unchanged bytes/mtimes and incompatible revision/target rejection pass |
-| `python3 tools/test_stage.py` | Complete pinned Horizon export stages deterministically; original checkout unchanged; exact HEAD/module audit passes |
-| `python3 tools/horizon.py check` | Actual `horizon-client` binary checks successfully with `--no-default-features` |
-| `python3 tools/horizon.py test` | The runtime's embedded test passes inside the actual Horizon game test binary |
+| `cargo test --workspace --locked --offline` | Three standalone runtime tests pass |
+| `python3 tools/test_template.py` | Pass: actual helpers compile; all four launch-switch combinations, normal execution/cancellation, ore faces, border filtering, unchanged world input, exact AST audit, deterministic staging and revision/target rejection |
+| `python3 tools/test_stage.py --horizon target/upstream/horizon` | Pass: complete pinned export, exact cancellable/noncancellable HEAD and module audit, repeatability, unchanged upstream checkout |
+| `python3 tools/horizon.py check --horizon target/upstream/horizon` | Pass: actual client binary type-checks |
+| `python3 tools/horizon.py test --horizon target/upstream/horizon` | Pass: six embedded runtime tests in the actual renderer library |
+| `python3 tools/package.py` | Source-only bundle created under ignored `target/` |
 
-The native check reported 69.55 seconds in Cargo, and the native test passed.
-Both reused an existing external Cargo target directory with cached
-Horizon dependencies. These are compilation/test checks, not a fresh-build
-benchmark. Staging the full export took about 24 seconds per command on this
-machine; a repeated application preserved the stage.
+The native check reports two unused-function warnings from the shared runtime
+copy in the lightmap module; the standalone Clippy check with warnings denied passes.
 
-No game was launched and no Minecraft resources or player data were read or
-changed. Interactive logging/gameplay remains a manual check with the compatible
-prepared resources. The source audit verifies only the declared HEAD statement
-and support module differ from pristine Rust ASTs; it does not claim compatibility
-with other Horizon revisions or arbitrary third-party mods.
+For this run, `HORIZON_MIXINS` pointed to the pinned checkout under
+`target/upstream/horizon-mixins`. Upstream sources were exported with `git archive`
+into ignored trees. No Minecraft assets or player resources were accessed.
 
-CI reproduces the formatting, clippy, standalone runtime and tiny-fixture tests.
-The full native checks additionally need a Horizon Git history containing the
-pin and its cached dependencies; use the commands in README.md to reproduce them.
+No game was launched. Rendering, shader packs, distant LOD terrain and gameplay
+remain manual checks. Xray only filters section terrain meshes; entities,
+particles and distant LOD meshes remain unchanged. It cannot reveal blocks that
+a server has not sent. Launch switches are read once and require a restart.
+Fullbright retains the original renderer lightmap path and existing option.
+These results apply only to the pinned Horizon sources, not other revisions or
+arbitrary combinations of third-party mods.

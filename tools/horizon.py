@@ -119,11 +119,16 @@ def main():
                   "horizon_revision": PIN, "staging_seconds": time.monotonic()-started}
         if args.action != "stage":
             command = ["cargo", args.action, "--locked", "--offline", "-p", "horizon-client",
-                       "--bin", "horizon-client", "--no-default-features", "--target-dir", str(target)]
+                       "--no-default-features", "--target-dir", str(target)]
+            if args.action == "test":
+                command[command.index("horizon-client")] = "horizon-client-render"
+                command.append("--lib")
+            else:
+                command.extend(["--bin", "horizon-client"])
             if args.action == "build":
                 command.extend(["--profile", "fast"])
             if args.action == "test":
-                command.extend(["game::example_mod::tests", "--", "--nocapture"])
+                command.extend(["meteor_horizon::tests", "--", "--nocapture"])
             with lock(target.parent / (target.name + ".mod-template.lock")):
                 run_start = time.monotonic()
                 result = subprocess.run(command, cwd=output, capture_output=True, text=True)

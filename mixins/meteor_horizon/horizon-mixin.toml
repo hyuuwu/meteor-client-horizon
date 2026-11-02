@@ -1,0 +1,34 @@
+[mod]
+id = "meteor_horizon"
+version = "0.1.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "ba6344a59cb9e755b730dcf02285fc0d33b97d3c"
+
+[[module]]
+id = "mesher-runtime"
+file = "crates/horizon-client-render/src/mesher.rs"
+name = "meteor_horizon"
+source = "runtime.rs"
+
+[[module]]
+id = "lightmap-runtime"
+file = "crates/horizon-client-render/src/gfx.rs"
+name = "meteor_horizon"
+source = "runtime.rs"
+
+[[injection]]
+id = "xray"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client_render::mesher::Mesher<'_>::mesh"
+helper = "xray.rs"
+bindings = [{ name = "mesher", ty = "&mut Mesher<'_>", value = "&mut *self" }, { name = "region", ty = "&[[Option<&crate::chunk::Chunk>; 3]; 3]", value = "region" }, { name = "sy", ty = "i32", value = "sy" }]
+
+[[injection]]
+id = "fullbright"
+kind = "HEAD"
+target = "horizon_client_render::gfx::Renderer::update_lightmap"
+helper = "fullbright.rs"
+bindings = [{ name = "renderer", ty = "&mut Renderer", value = "&mut *self" }]

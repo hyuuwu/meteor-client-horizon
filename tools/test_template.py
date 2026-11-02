@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile the real bundle on a tiny source fixture; no Horizon/assets required."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -36,21 +37,109 @@ def main():
     with tempfile.TemporaryDirectory(prefix='template-test-', dir=root/'target') as scratch:
         scratch = Path(scratch)
         original, stage = scratch/'original', scratch/'stage'
-        (original/'crates/horizon-client/src').mkdir(parents=True)
-        (original/'Cargo.toml').write_text('[workspace]\nmembers=["crates/horizon-client"]\nresolver="2"\n')
-        (original/'crates/horizon-client/Cargo.toml').write_text('[package]\nname="horizon-client"\nversion="0.1.0"\nedition="2024"\n')
-        (original/'crates/horizon-client/src/lib.rs').write_text('pub mod game;\n')
-        (original/'crates/horizon-client/src/game.rs').write_text('''
-pub struct Game<'a> { pub positions: &'a mut Vec<[i32;3]> }
-impl Game<'_> {
-    pub fn break_block(&mut self,pos:[i32;3])->i32 {self.positions.push(pos); 7}
+        source = original/'crates/horizon-client-render/src'
+        source.mkdir(parents=True)
+        (original/'Cargo.toml').write_text('[workspace]\nmembers=["crates/horizon-client-render"]\nresolver="2"\n')
+        (source.parent/'Cargo.toml').write_text('[package]\nname="horizon-client-render"\nversion="0.1.0"\nedition="2024"\n')
+        (source/'lib.rs').write_text('''extern crate self as horizon_world;
+extern crate self as horizon_core;
+pub mod position { pub struct BlockPos; impl BlockPos { pub fn new(_: i32, _: i32, _: i32) -> Self { Self } } }
+pub mod registry {
+    pub struct BlockStateId(pub u32);
+    pub struct State { pub name: String }
+    pub struct Registry;
+    impl Registry { pub fn len(&self) -> usize { 3 } }
+    impl Registry {
+        pub fn state(&self, id: BlockStateId) -> Option<State> {
+            Some(State { name: match id.0 {
+                1 => "minecraft:stone", 2 => "minecraft:diamond_ore", _ => return None,
+            }.into() })
+        }
+    }
 }
-#[test] fn original_body_and_result_are_preserved() {
-    let mut positions=Vec::new();
-    let mut game=Game {positions:&mut positions};
-    assert_eq!(game.break_block([1,2,3]),7);
-    assert_eq!(game.break_block([-1,64,8]),7);
-    assert_eq!(positions,vec![[1,2,3],[-1,64,8]]);
+pub mod assets { pub struct Assets { pub registry: &'static crate::registry::Registry } }
+pub mod chunk {
+    pub const MIN_Y: i32 = -64;
+    pub struct Chunk { pub x: i32, pub z: i32 }
+    impl Chunk {
+        pub fn min_y(&self) -> i32 { MIN_Y }
+        pub fn get(&self, x: i32, y: i32, z: i32) -> u32 {
+            if x == 1 && y == MIN_Y && z == 1 { 2 } else { 1 }
+        }
+    }
+}
+pub mod mesher;
+pub mod gfx;
+''')
+        (source/'mesher.rs').write_text('''use crate::{assets::Assets, chunk::Chunk};
+const B: i32 = 1;
+const P: usize = 18;
+fn pi(x: i32, y: i32, z: i32) -> usize {
+    ((y + B) as usize * P + (z + B) as usize) * P + (x + B) as usize
+}
+struct Padded { blocks: Vec<u32>, light: Vec<u8> }
+impl Padded {
+    fn new(region: &[[Option<&Chunk>; 3]; 3], sy: i32) -> Self {
+        assert_eq!(sy, 0);
+        assert!(region[1][1].is_some());
+        let mut blocks = vec![1; P * P * P];
+        blocks[pi(1, 0, 1)] = 2;
+        Self { blocks, light: vec![0; P * P * P] }
+    }
+}
+#[derive(Default)]
+pub struct SectionMesh { pub visibility: u64, pub ores: Vec<[i32; 3]> }
+pub struct Tables { info: Vec<()> }
+pub struct Catalog;
+pub struct Render { model_catalog: Catalog }
+pub struct Model { faces: Vec<()> }
+impl Catalog {
+    fn models_at(&self, _: crate::registry::BlockStateId, _: crate::position::BlockPos, models: &mut Vec<Model>) -> Result<(), ()> {
+        models.clear(); models.push(Model { faces: vec![(); 6] }); Ok(())
+    }
+}
+struct Tints;
+impl Tints { fn new(_: &[[Option<&Chunk>;3];3], _: &(), _: (), _: i32, _: [i32;3]) -> Self { Self } }
+pub struct Mesher<'a> {
+    pub assets: &'a Assets, tables: Tables, render: Render, biomes: &'a (), zoom: (), blend_radius: i32,
+}
+impl Mesher<'_> {
+    pub fn mesh(&mut self, region: &[[Option<&Chunk>; 3]; 3], sy: i32) -> SectionMesh {
+        let pad = Padded::new(region, sy);
+        assert_eq!(pad.light[0], 0);
+        assert_eq!(pad.blocks[pi(0, 0, 0)], 1);
+        SectionMesh { visibility: 123, ores: vec![] }
+    }
+    fn face(&self, pad: &Padded, _: &mut Tints, out: &mut SectionMesh, pos: [i32;3], _: [f32;3], _: &(), ao: bool, _: &()) {
+        assert!(!ao);
+        assert_eq!(pad.light[0], 255);
+        assert_eq!(pad.blocks[pi(-1, 0, 0)], 0);
+        out.ores.push(pos);
+    }
+}
+#[test] fn original_body_and_input_are_preserved() {
+    static REGISTRY: crate::registry::Registry = crate::registry::Registry;
+    let assets = Assets { registry: &REGISTRY };
+    let mut mesher = Mesher { assets: &assets, tables: Tables { info: vec![(); 3] }, render: Render { model_catalog: Catalog }, biomes: &(), zoom: (), blend_radius: 0 };
+    let chunk = Chunk { x: 0, z: 0 };
+    let region = [[Some(&chunk); 3]; 3];
+    let out = mesher.mesh(&region, 0);
+    let xray = std::env::var("HORIZON_XRAY").as_deref() == Ok("1");
+    assert_eq!(out.visibility, if xray { u64::MAX } else { 123 });
+    assert_eq!(out.ores, if xray { vec![[1, 0, 1]; 6] } else { vec![] });
+    assert_eq!(chunk.get(0, crate::chunk::MIN_Y, 0), 1);
+}
+''')
+        (source/'gfx.rs').write_text('''pub struct Renderer { fullbright: bool }
+impl Renderer {
+    fn update_lightmap(&mut self) -> u8 {
+        if self.fullbright { 255 } else { 42 }
+    }
+}
+#[test] fn existing_fullbright_option_is_preserved() {
+    assert_eq!(Renderer { fullbright: true }.update_lightmap(), 255);
+    let forced = std::env::var("HORIZON_FULLBRIGHT").as_deref() == Ok("1");
+    assert_eq!(Renderer { fullbright: false }.update_lightmap(), if forced { 255 } else { 42 });
 }
 ''')
         (original/'rust-toolchain.toml').write_bytes((root/'rust-toolchain.toml').read_bytes())
@@ -59,8 +148,11 @@ impl Game<'_> {
         before = snapshot(original)
         base = ['--workspace', str(original), '--mods', str(root/'mixins')]
         report = json.loads(run([str(cli), 'check', *base, '--out', str(stage), '--trust-native-mods']).stdout)
-        assert report['injections'] == 1 and report['modules'] == 1
-        assert '2 passed' in report['cargo_stdout']
+        assert report['injections'] == 2 and report['modules'] == 2
+        assert '8 passed' in report['cargo_stdout']
+        for xray, fullbright in [('0', '0'), ('1', '0'), ('0', '1'), ('1', '1')]:
+            run(['cargo', 'test', '--locked', '--offline'], cwd=stage,
+                env={**os.environ, 'HORIZON_XRAY': xray, 'HORIZON_FULLBRIGHT': fullbright})
         first = snapshot(stage)
         second = json.loads(run([str(cli), 'check', *base, '--out', str(stage), '--trust-native-mods']).stdout)
         assert not second['stage_changed'] and snapshot(stage) == first
@@ -76,8 +168,8 @@ impl Game<'_> {
         assert bad.returncode and json.loads(bad.stderr)['code'] == 'E_REVISION'
         assert snapshot(stage) == first
         (original/'.horizon-revision').write_text(horizon.PIN+'\n')
-        source = original/'crates/horizon-client/src/game.rs'
-        source.write_text(source.read_text().replace('break_block', 'renamed_break_block'))
+        source = original/'crates/horizon-client-render/src/mesher.rs'
+        source.write_text(source.read_text().replace('fn mesh(', 'fn renamed_mesh('))
         bad = subprocess.run([str(cli), 'apply', *base, '--out', str(stage)], capture_output=True, text=True)
         assert bad.returncode and json.loads(bad.stderr)['code'] == 'E_TARGET_NOT_FOUND'
         assert snapshot(stage) == first

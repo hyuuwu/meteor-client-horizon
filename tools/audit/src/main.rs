@@ -36,7 +36,6 @@ fn main() {
             .map(|n| n.as_u64().unwrap() as usize)
             .collect();
         assert_eq!(p["kind"], "HEAD");
-        assert_eq!(p["cancellable"], false);
         let helper: syn::ItemFn = syn::parse_str(p["helper_source"].as_str().unwrap()).unwrap();
         let name = &helper.sig.ident;
         let args: Vec<syn::Expr> = p["bindings"]
@@ -45,7 +44,12 @@ fn main() {
             .iter()
             .map(|b| syn::parse_str(b["value"].as_str().unwrap()).unwrap())
             .collect();
-        let expected: syn::Stmt = syn::parse2(quote!({#helper #name(#(#args),*)};)).unwrap();
+        let call = quote!({#helper #name(#(#args),*)});
+        let expected: syn::Stmt = if p["cancellable"] == true {
+            syn::parse2(quote!(if let ::core::ops::ControlFlow::Break(__horizon_mixins_return) = #call { return __horizon_mixins_return; })).unwrap()
+        } else {
+            syn::parse2(quote!(#call;)).unwrap()
+        };
         let b = block(&mut tree.items, &node);
         let actual = b.stmts.first().expect("HEAD missing");
         let actual_fn: Item = syn::parse_quote!(fn audit() {#actual});
@@ -86,7 +90,5 @@ fn main() {
             "unexpected source change in {file}"
         );
     }
-    println!(
-        "all original ASTs preserved apart from the planned HEAD statement and support module"
-    );
+    println!("all original ASTs preserved apart from planned HEAD hooks and support modules");
 }

@@ -1,4 +1,4 @@
-name: Native mod template
+name: Meteor Horizon
 on:
   push:
   pull_request:
