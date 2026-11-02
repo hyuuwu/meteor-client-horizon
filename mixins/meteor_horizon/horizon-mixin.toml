@@ -10,13 +10,14 @@ horizon_revision = "ba6344a59cb9e755b730dcf02285fc0d33b97d3c"
 id = "mesher-runtime"
 file = "crates/horizon-client-render/src/mesher.rs"
 name = "meteor_horizon"
+visibility = "pub"
 source = "runtime.rs"
 
 [[module]]
-id = "lightmap-runtime"
-file = "crates/horizon-client-render/src/gfx.rs"
-name = "meteor_horizon"
-source = "runtime.rs"
+id = "game-menu"
+file = "crates/horizon-client/src/game.rs"
+name = "meteor_menu"
+source = "menu.rs"
 
 [[injection]]
 id = "xray"
@@ -32,3 +33,41 @@ kind = "HEAD"
 target = "horizon_client_render::gfx::Renderer::update_lightmap"
 helper = "fullbright.rs"
 bindings = [{ name = "renderer", ty = "&mut Renderer", value = "&mut *self" }]
+
+[[injection]]
+id = "menu-open"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::Game<'_>::key_pressed"
+helper = "menu_open.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }, { name = "key", ty = "winit::keyboard::KeyCode", value = "key" }]
+
+[[injection]]
+id = "menu-draw"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::options::Game<'_>::draw_options"
+helper = "menu_draw.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }, { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" }]
+
+[[injection]]
+id = "menu-mouse"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::options::Game<'_>::options_mouse"
+helper = "menu_mouse.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }, { name = "pressed", ty = "bool", value = "pressed" }, { name = "right", ty = "bool", value = "right" }]
+
+[[injection]]
+id = "menu-key"
+kind = "HEAD"
+cancellable = true
+target = "horizon_client::game::options::Game<'_>::options_key"
+helper = "menu_key.rs"
+bindings = [{ name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" }, { name = "key", ty = "winit::keyboard::KeyCode", value = "key" }]
+
+[[injection]]
+id = "menu-reset"
+kind = "HEAD"
+target = "horizon_client::game::options::Game<'_>::open_options_at"
+helper = "menu_reset.rs"

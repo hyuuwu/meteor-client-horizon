@@ -12,10 +12,16 @@ or artwork is included. The template and this implementation use the MIT license
   stays open so enclosed deposits can render. Only temporary mesh buffers change;
   world blocks, collision, saves and server packets remain unchanged.
 - **Fullbright:** forces Horizon's existing white lightmap. With the launch switch
-  off, Horizon's own Fullbright setting continues to work normally.
+  off and before a menu override, Horizon's own Fullbright setting works normally.
 
-Both launch switches default to off. Enable either independently with `1` or
-`true`; restart the client to change them. There is no custom in-game menu yet.
+Press **Right Shift** while playing to open the Meteor Horizon menu. Click
+**Xray** or **Fullbright** to toggle it, or use Up/Down (Tab) and Enter/Space.
+Click **Done** or press **Escape** to return to the game. Xray changes rebuild
+loaded terrain meshes; this can take a moment. The menu releases the mouse and
+clears held gameplay keys. Changes last for the session and do not write settings.
+
+The optional launch switches set initial values. Both default to off; enable
+either independently with `1` or `true`. The menu can change them without restarting.
 
 ```sh
 HORIZON_XRAY=1 HORIZON_FULLBRIGHT=1 \
@@ -56,9 +62,11 @@ compatible with the pinned release when launching.
 ## Development and validation
 
 `mixins/meteor_horizon/runtime.rs` is the standalone Cargo library and the
-injected runtime source. `xray.rs` is a cancellable HEAD adapter around Horizon's
-existing meshing/model helpers; `fullbright.rs` sets the renderer flag before
-its original lightmap update. Compatibility hashes cover both modified files.
+injected runtime source, shared by meshing, lighting and the menu through one
+public renderer module. `xray.rs` is a cancellable HEAD adapter around Horizon's
+existing meshing/model helpers; `fullbright.rs` applies the live lighting override.
+`menu.rs` and the menu adapters handle drawing, input and remeshing. Compatibility
+hashes cover the two renderer files and the two gameplay files that receive hooks.
 
 ```sh
 cargo fmt --all --check
@@ -72,7 +80,8 @@ python3 tools/package.py
 ```
 
 The fixture compiles the actual helpers, exercises all four launch-switch
-combinations, checks cancellation and normal execution, and audits the original
+combinations and actual menu adapters, checks live toggles, input routing,
+cancellation and normal execution, and audits the original
 ASTs after removing only exact planned additions. The native test command runs
 the embedded runtime tests in `horizon-client-render`. Packaging creates a
 reproducible source-only `target/meteor_horizon-0.1.0.hnmod`; no binaries,

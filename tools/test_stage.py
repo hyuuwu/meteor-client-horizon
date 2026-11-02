@@ -27,7 +27,7 @@ def main():
             assert second == output and not changed and first == snapshot(output)
             plan = json.loads((root/'plan.json').read_text())
             assert plan['schema'] == horizon.COMPAT['mixin_schema']
-            assert len(plan['injections']) == 2 and len(plan['modules']) == 2
+            assert len(plan['injections']) == 7 and len(plan['modules']) == 2
             original = next((root/'original').glob('*/.horizon-mod-template.json')).parent
             audit(original, output, root/'plan.json')
     assert subprocess.check_output(['git', '-C', str(checkout), 'diff', 'HEAD']) == before

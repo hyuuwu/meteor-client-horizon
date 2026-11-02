@@ -1,3 +1,5 @@
 fn fullbright(renderer: &mut Renderer) {
-    renderer.fullbright |= meteor_horizon::config().fullbright;
+    if let Some(enabled) = crate::mesher::meteor_horizon::state().fullbright_override() {
+        renderer.fullbright = enabled;
+    }
 }

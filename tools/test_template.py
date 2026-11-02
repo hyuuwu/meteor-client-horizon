@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import tempfile
 import tomllib
 import horizon
@@ -39,7 +40,7 @@ def main():
         original, stage = scratch/'original', scratch/'stage'
         source = original/'crates/horizon-client-render/src'
         source.mkdir(parents=True)
-        (original/'Cargo.toml').write_text('[workspace]\nmembers=["crates/horizon-client-render"]\nresolver="2"\n')
+        (original/'Cargo.toml').write_text('[workspace]\nmembers=["crates/horizon-client-render", "crates/horizon-client", "crates/winit"]\nresolver="2"\n')
         (source.parent/'Cargo.toml').write_text('[package]\nname="horizon-client-render"\nversion="0.1.0"\nedition="2024"\n')
         (source/'lib.rs').write_text('''extern crate self as horizon_world;
 extern crate self as horizon_core;
@@ -140,18 +141,44 @@ impl Renderer {
     assert_eq!(Renderer { fullbright: true }.update_lightmap(), 255);
     let forced = std::env::var("HORIZON_FULLBRIGHT").as_deref() == Ok("1");
     assert_eq!(Renderer { fullbright: false }.update_lightmap(), if forced { 255 } else { 42 });
+    let state = crate::mesher::meteor_horizon::state();
+    let mut renderer = Renderer { fullbright: false };
+    if !state.config().fullbright { state.toggle(1); }
+    assert_eq!(renderer.update_lightmap(), 255);
+    state.toggle(1);
+    assert_eq!(renderer.update_lightmap(), 42);
 }
 ''')
+        # Minimal host interfaces compile the actual menu adapters without assets.
+        client = original/'crates/horizon-client/src'
+        client.mkdir(parents=True)
+        (client.parent/'Cargo.toml').write_text('[package]\nname="horizon-client"\nversion="0.1.0"\nedition="2024"\n[dependencies]\nhorizon-client-render={path="../horizon-client-render"}\nwinit={path="../winit"}\n')
+        (client/'lib.rs').write_text('extern crate self as horizon_client;\npub use horizon_client_render::{mesher, hud};\npub type Result<T> = std::result::Result<T, ()>;\npub mod game;\n')
+        shutil.copyfile(root/'tools/fixtures/menu/game.rs', client/'game.rs')
+        shutil.copytree(root/'tools/fixtures/menu/game', client/'game')
+        winit = original/'crates/winit/src'
+        winit.mkdir(parents=True)
+        (winit.parent/'Cargo.toml').write_text('[package]\nname="winit"\nversion="0.1.0"\nedition="2024"\n')
+        (winit/'lib.rs').write_text('pub mod keyboard { #[derive(Clone, Copy, PartialEq, Eq, Hash)] pub enum KeyCode { ShiftRight, Escape, ArrowUp, ArrowDown, Tab, Enter, NumpadEnter, Space, KeyA } }')
+        with (source/'lib.rs').open('a') as lib:
+            lib.write('''pub mod hud {
+                pub struct HudAtlas;
+                pub struct HudBatch { pub width: f32, pub height: f32, pub labels: Vec<String> }
+                impl HudBatch {
+                    pub fn fill(&mut self, _: &HudAtlas, _: f32, _: f32, _: f32, _: f32, _: u32) {}
+                    pub fn text(&mut self, _: &HudAtlas, text: &str, _: f32, _: f32, _: u32, _: bool) -> f32 { self.labels.push(text.into()); 0.0 }
+                }
+            }''')
         (original/'rust-toolchain.toml').write_bytes((root/'rust-toolchain.toml').read_bytes())
         (original/'.horizon-revision').write_text(horizon.PIN+'\n')
         run(['cargo', 'generate-lockfile', '--offline'], cwd=original)
         before = snapshot(original)
         base = ['--workspace', str(original), '--mods', str(root/'mixins')]
         report = json.loads(run([str(cli), 'check', *base, '--out', str(stage), '--trust-native-mods']).stdout)
-        assert report['injections'] == 2 and report['modules'] == 2
-        assert '8 passed' in report['cargo_stdout']
+        assert report['injections'] == 7 and report['modules'] == 2
+        assert '7 passed' in report['cargo_stdout'] and '1 passed' in report['cargo_stdout']
         for xray, fullbright in [('0', '0'), ('1', '0'), ('0', '1'), ('1', '1')]:
-            run(['cargo', 'test', '--locked', '--offline'], cwd=stage,
+            run(['cargo', 'test', '--workspace', '--locked', '--offline'], cwd=stage,
                 env={**os.environ, 'HORIZON_XRAY': xray, 'HORIZON_FULLBRIGHT': fullbright})
         first = snapshot(stage)
         second = json.loads(run([str(cli), 'check', *base, '--out', str(stage), '--trust-native-mods']).stdout)

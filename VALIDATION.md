@@ -9,15 +9,12 @@ Horizon and horizon-mixins revisions remain pinned in `compatibility.json`.
 |---|---|
 | `cargo fmt --all --check` | Pass |
 | `cargo clippy --workspace --all-targets --locked --offline -- -D warnings` | Pass |
-| `cargo test --workspace --locked --offline` | Three standalone runtime tests pass |
-| `python3 tools/test_template.py` | Pass: actual helpers compile; all four launch-switch combinations, normal execution/cancellation, ore faces, border filtering, unchanged world input, exact AST audit, deterministic staging and revision/target rejection |
-| `python3 tools/test_stage.py --horizon target/upstream/horizon` | Pass: complete pinned export, exact cancellable/noncancellable HEAD and module audit, repeatability, unchanged upstream checkout |
-| `python3 tools/horizon.py check --horizon target/upstream/horizon` | Pass: actual client binary type-checks |
-| `python3 tools/horizon.py test --horizon target/upstream/horizon` | Pass: six embedded runtime tests in the actual renderer library |
+| `cargo test --workspace --locked --offline` | Five standalone runtime tests pass |
+| `python3 tools/test_template.py` | Pass: actual helpers compile; all four initial switch combinations; menu open/draw/click/keyboard/close and normal options restoration; reversible live lighting; ore faces, border filtering, unchanged world input, AST audit, deterministic staging and revision/target rejection |
+| `python3 tools/test_stage.py --horizon target/upstream/horizon` | Pass: seven exact HEAD hooks and two support modules; original ASTs preserved, repeatable staging, upstream checkout unchanged |
+| `python3 tools/horizon.py check --horizon target/upstream/horizon` | Pass: actual client binary type-checks without warnings |
+| `python3 tools/horizon.py test --horizon target/upstream/horizon` | Pass: five embedded tests in the shared native runtime |
 | `python3 tools/package.py` | Source-only bundle created under ignored `target/` |
-
-The native check reports two unused-function warnings from the shared runtime
-copy in the lightmap module; the standalone Clippy check with warnings denied passes.
 
 For this run, `HORIZON_MIXINS` pointed to the pinned checkout under
 `target/upstream/horizon-mixins`. Upstream sources were exported with `git archive`
@@ -26,7 +23,9 @@ into ignored trees. No Minecraft assets or player resources were accessed.
 No game was launched. Rendering, shader packs, distant LOD terrain and gameplay
 remain manual checks. Xray only filters section terrain meshes; entities,
 particles and distant LOD meshes remain unchanged. It cannot reveal blocks that
-a server has not sent. Launch switches are read once and require a restart.
-Fullbright retains the original renderer lightmap path and existing option.
+a server has not sent. The menu is exercised through host stubs, not a real window.
+Launch switches set initial values; menu toggles apply during play without saving
+settings. The shared atomic state is used by UI, meshing workers and lighting.
+Fullbright retains the original renderer lightmap path.
 These results apply only to the pinned Horizon sources, not other revisions or
 arbitrary combinations of third-party mods.

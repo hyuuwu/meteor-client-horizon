@@ -74,7 +74,9 @@ fn main() {
         };
         let payload = syn::parse_file(m["source"].as_str().unwrap()).unwrap();
         assert!(module.attrs.is_empty());
-        assert!(matches!(&module.vis, syn::Visibility::Restricted(v) if v.path.is_ident("crate")));
+        let visibility: syn::Visibility =
+            syn::parse_str(m["visibility"].as_str().unwrap_or("pub(crate)")).unwrap();
+        assert_eq!(module.vis, visibility);
         let mut expected = module.clone();
         expected.content.as_mut().unwrap().1 = payload.items;
         assert!(
